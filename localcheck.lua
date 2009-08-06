@@ -102,24 +102,32 @@ table.sort(keyOrder, function(a, b) return a < b end)
 file:write("\n")
 
 local hadTables
-local subKeyOrder = {}
-for _, key in pairs(keyOrder) do
-	file:write(string.format("\n	[\"%s\"] = {\n", key))
+local function writeTable(key, tbl, depth)
+	file:write(string.format(string.rep("	", depth) .. "[\"%s\"] = {\n", key))
 	
-	for i=#(subKeyOrder), 1, -1 do table.remove(subKeyOrder, i) end
-
-	local data = _G[LOCAL_VAR][key]
+	local data = tbl[key]
+	local subKeyOrder = {}
 	for subKey in pairs(data) do
 		table.insert(subKeyOrder, subKey)
 	end
 	
 	table.sort(subKeyOrder, function(a, b) return a < b end)
 	for _, subKey in pairs(subKeyOrder) do
-		file:write(string.format("		[\"%s\"] = \"%s\",\n", parse(subKey), parse(data[subKey])))
+		if( type(data[subKey]) == "table" ) then
+			writeTable(subKey, data, depth + 1)
+		elseif( tonumber(subKey) ) then
+			file:write(string.format("%s[%s] = \"%s\",\n", string.rep("	", depth + 1), subKey, parse(data[subKey])))
+		else
+			file:write(string.format("%s[\"%s\"] = \"%s\",\n", string.rep("	", depth + 1), parse(subKey), parse(data[subKey])))
+		end
 	end
 	
 	hadTables = true
-	file:write("	},")
+	file:write(string.rep("	", depth) .. "},\n")
+end
+
+for _, key in pairs(keyOrder) do
+	writeTable(key, _G[LOCAL_VAR], 1)
 end
 
 if( hadTables ) then
