@@ -6,15 +6,21 @@ end
 
 local file = io.open("localization.enUS.lua")
 local contents = file:read("*line")
+local nextLine = file:read("*line")
 file:close()
 
 local LOCAL_VAR = string.match(contents, "^(.+) = {")
-if( not LOCAL_VAR ) then
+local IS_NAMESPACED = string.match(contents, "%.%.%.")
+if( not IS_NAMESPACED and not LOCAL_VAR ) then
 	output("Failed to find localization variable in localization.enUS.lua")
 	return
+elseif( IS_NAMESPACED ) then
+	output("Namespaced, using only L to identify")
+	LOCAL_VAR = string.match(nextLine, "^(.+) = {")
 else
 	output("Localization key " .. LOCAL_VAR)
 end
+
 
 function string.trim(text)
 	return string.gsub(text, "^%s*(.-)%s*$", "%1")
@@ -31,9 +37,11 @@ local function scanFile(path)
 		totalFound = totalFound + 1
 	end
 
-	for line in string.gmatch(contents, LOCAL_VAR .. "%[\"(.-)\"%]") do
-		foundLocals[string.trim(line)] = true
-		totalFound = totalFound + 1
+	if( not IS_NAMESPACED ) then
+		for line in string.gmatch(contents, LOCAL_VAR .. "%[\"(.-)\"%]") do
+			foundLocals[string.trim(line)] = true
+			totalFound = totalFound + 1
+		end
 	end
 end
 
@@ -68,10 +76,16 @@ end
 
 table.sort(keyOrder, function(a, b) return a < b end)
 
--- Load the current localization to get the tables out
-dofile("localization.enUS.lua")
-
 local file = io.open("localization.enUS.lua", "w")
+
+-- Load the current localization to get the tables out
+if( not IS_NAMESPACED ) then
+	dofile("localization.enUS.lua")
+else
+	local tblName = string.match(LOCAL_VAR, "^(.+)%.L")
+	file:write(string.format("local %s = select(2, ...)\n", tblName))
+end
+
 file:write(LOCAL_VAR .. " = {")
 
 -- Write all used keys
@@ -91,13 +105,15 @@ end
 -- Tables inside localization are assumed to always be there
 local _G = getfenv(0)
 local keyOrder = {}
-for key, data in pairs(_G[LOCAL_VAR]) do
-	if( type(data) == "table" ) then
-		table.insert(keyOrder, key)
+if( _G[LOCAL_VAR] ) then
+	for key, data in pairs(_G[LOCAL_VAR]) do
+		if( type(data) == "table" ) then
+			table.insert(keyOrder, key)
+		end
 	end
-end
 
-table.sort(keyOrder, function(a, b) return a < b end)
+	table.sort(keyOrder, function(a, b) return a < b end)
+end
 
 file:write("\n")
 
